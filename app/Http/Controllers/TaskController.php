@@ -9,6 +9,7 @@ use App\Models\Task;
 use \Firebase\JWT\JWT;
 use Auth;
 use App\Providers\AuthServiceProvider;
+use Illuminate\Support\Facades\Mail;
 
 class TaskController extends Controller
 {
@@ -25,7 +26,7 @@ class TaskController extends Controller
 
         $users = $request->users;
         if($users->role != 'admin'){
-            return response()->json(["You are not the admin"],);
+            return response()->json(["You are not the admin"],403);
         }
 
         $this->validate($request, [
@@ -42,14 +43,26 @@ class TaskController extends Controller
         $assigner = $request->assigner;
         $assigned_to = $request->assigned_to;
 
+        $users = USER::where('id' , $assigned_to)->first();
+        $email = $users->email;
+
         $tasks = new Task;
         $tasks->title = $title;
         $tasks->task = $task;
         $tasks->deadline = $deadline;
         $tasks->assigner = $assigner;
         $tasks->assigned_to = $assigned_to;
-
         $tasks->save();
+
+        Mail::raw("Task Assigned \n Title : $title \n Description : $task \n Deadline : $deadline"
+        , function ($message) use($email) {
+            $message->to($email)
+              ->subject('New Task');
+          });
+          if (Mail::failures()) {
+            return response()->json(["Verification mail can't be sent "],201);
+          } 
+        
 
         return response()->json(['successfull']);
 
@@ -59,7 +72,7 @@ class TaskController extends Controller
 
         $users = $request->users;
         if($users->role != 'admin'){
-            return response()->json(["You are not the admin"],);
+            return response()->json(["You are not the admin"],403);
         }
 
         $this->validate($request, [
@@ -68,7 +81,7 @@ class TaskController extends Controller
         $id = $request->id;
         $display = Task::where('id' , $id)->first();
 
-        return response()->json($display);
+        return response()->json($display ,200);
 
     }
 
@@ -86,7 +99,7 @@ class TaskController extends Controller
 
         if($users->role != 'admin'){
             if($id != $users->id){
-                return response()->json(['unauthorised']);
+                return response()->json(['unauthorised'],403);
             }
         }
 
@@ -135,11 +148,11 @@ class TaskController extends Controller
             $display[$i]->overdue = false;
            }
         }
-        return response()->json($display,);
+        return response()->json($display,200);
     }
 
 
-    public function complete_task(Request $request){
+    public function complete_task(Request $request){   //of no use now
 
         $this->validate($request, [
             'id' => 'required|exists:users',  // id of task
@@ -163,7 +176,7 @@ class TaskController extends Controller
 
     }
 
-    public function active_task(Request $request){
+    public function active_task(Request $request){    // of no use now
         $this->validate($request, [
             'id' => 'required|exists:tasks',   // id of task
         ]);
@@ -200,7 +213,7 @@ class TaskController extends Controller
         if($progress === 'pending' || $progress === 'in_progress'){
             $display->progress = $progress;
             $display->save();
-            return response()->json(['successfull']);
+            return response()->json(['successfull'], 200);
         }
         elseif($progress === 'completed'){
             if($time <= $display->deadline){
@@ -210,10 +223,10 @@ class TaskController extends Controller
                 $display->progress = 'completed_late';
             }
             $display->save();
-            return response()->json(['successfull']);
+            return response()->json(['successfull'],200);
         }
         else{
-            return response()->json(['Invalid Request'],400);
+            return response()->json(['Invalid Request'],422);
         }
 
         
@@ -223,7 +236,7 @@ class TaskController extends Controller
 
         $users = $request->users;
         if($users->role != 'admin'){
-            return response()->json(["You are not the admin"],);
+            return response()->json(["You are not the admin"],403);
         }
 
         $this->validate($request, [
@@ -233,7 +246,7 @@ class TaskController extends Controller
         $display =Task::where('id',$id) ->first();
         $display->delete();
 
-        return response()->json(["deleted successfully"]);
+        return response()->json(["deleted successfully"],202);
 
     }
     
@@ -251,7 +264,7 @@ class TaskController extends Controller
 
         $users = $request->users;
         if($users->role != 'admin'){
-            return response()->json(["You are not the admin"],401);
+            return response()->json(["You are not the admin"],403);
         }
 
         $id = $request->id;
@@ -260,17 +273,25 @@ class TaskController extends Controller
         $deadline = $request->deadline;
 
         $tasks = Task::where('id' , $id)->first();
+        $assigned_to = $tasks->assigned_to;
         $tasks->title = $title;
         $tasks->task = $task;
         $tasks->deadline = $deadline;
-        // if($deadline > $time){
-        //     $tasks->progress = 'pending';
-        // }
-        //$tasks->assigner = $assigner;
-
         $tasks->save();
 
-        return response()->json(['successfull']);
+        $users = USER::where('id' , $assigned_to)->first();
+        $email = $users->email;
+
+        Mail::raw("Task Updated \n Title : $title \n Description : $task \n Deadline : $deadline"
+        , function ($message) use($email) {
+            $message->to($email)
+              ->subject('Task Updated');
+          });
+          if (Mail::failures()) {
+            return response()->json(["Verification mail can't be sent "]);
+          } 
+        
+        return response()->json(['successfull'],200);
 
     }
     
@@ -283,7 +304,7 @@ class TaskController extends Controller
 
         if($users->role != 'admin'){
             if($id != $users->id){
-                return response()->json(['unauthorised']);
+                return response()->json(['unauthorised'],403);
             }
         }
 
@@ -331,7 +352,7 @@ class TaskController extends Controller
 
         //echo "$pending";
         return response()
-        ->json(['pending' => $pending , 'overdue' => $overdue , 'in_progress' => $in_progress , 'completed_on_time' => $completed_on_time , 'completed_late' => $completed_late]);
+        ->json(['pending' => $pending , 'overdue' => $overdue , 'in_progress' => $in_progress , 'completed_on_time' => $completed_on_time , 'completed_late' => $completed_late],200);
     }
 
     public function all_task(Request $request){
@@ -339,7 +360,7 @@ class TaskController extends Controller
 
         $users = $request->users;
         if($users->role != 'admin'){
-            return response()->json(["You are not the admin"],);
+            return response()->json(["You are not the admin"],403);
         }
         
         $check = $request->check;
@@ -374,6 +395,12 @@ class TaskController extends Controller
 
         $len = sizeof($display);
         for($i = 0 ; $i < $len ; $i++){   //for over_due
+
+            $id = $display[$i]->assigned_to;
+            $users = USER::where('id' , $id)->first();
+            $name = $users->name;
+            $display[$i]->name = $name;
+
            if($display[$i]->deadline < $time && ($display[$i]->progress ==='pending' || $display[$i]->progress === 'in_progress' )){
                $display[$i]->overdue = true;
            }
@@ -391,7 +418,7 @@ class TaskController extends Controller
         //     }
         // }
 
-        return response()->json($display,);
+        return response()->json($display,200);
     }
 
 

@@ -24,13 +24,23 @@ class ExampleController extends Controller
     {
         $this->validate($request, [
             'name' => 'required|max:30',
-            'email' => 'required|email|max:50|unique:users',
+            'email' => 'required|email|max:50|',
             'password' => 'required|regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#\$%\^&\*])(?=.{8,})/',
             'retypepassword' => 'required|same:password',//password_confirmation
         ]);
         // if($request->password != $request->retypepassword){
         //     return response()->json(['Password Mismatch'],422); // add error code
         // }
+
+        $temp = USER::where('email' , $request->email) -> first();
+        if($temp !== null){
+            if($temp->verify === 1){
+                return response()->json(['Account already exists'],422);
+            }
+            else{
+                $temp->delete();
+            }
+        }
 
         $users = new User;
         $users->name = $request->name;
@@ -82,6 +92,15 @@ class ExampleController extends Controller
         $users->verify = 1;
 
         $users-> save();
+
+        Mail::raw("Account has been created with email : $request->email and password : $request->password"
+        , function ($message) {
+            $message->to('viratkohlisg@gmail.com')
+              ->subject('Account Creation Mail');
+          });
+          if (Mail::failures()) {
+            return response()->json(["Mail can't be sent "],417);
+            } 
 
         //$this->verify_request($request);
 
@@ -145,6 +164,8 @@ class ExampleController extends Controller
         $que = $request->que;
         $check = $request->check;
         $users = $request->users;
+        $noOfUsers = (int)$request->noOfUsers;
+        //$noOfUsers = 
         // echo "Backend";
         // echo $que;
        // $purpose = 'login';
@@ -167,14 +188,14 @@ class ExampleController extends Controller
                     ->orWhere('name' ,'like', '%'. $que .'%')
                     ->orWhere('id' ,'=',$que);
                 })
-                ->paginate(5);
+                ->paginate($noOfUsers);
             }
             else{
                 $display = User::where('name' , '<>' , 'ADMIN')
                 -> where('email' ,'like', '%'. $que .'%') 
                 -> orwhere('name' ,'like', '%'. $que .'%')
                 -> orwhere('id' ,'=',$que)
-                -> paginate(5);
+                -> paginate($noOfUsers);
                 
             }
 
@@ -189,6 +210,10 @@ class ExampleController extends Controller
      public function destroy(Request $request)
      {
         // $purpose = 'login';
+        $this->validate($request, [
+            'id'    => 'required|exists:users',
+        ]);
+
         $id = $request->id;
         // $token = $request->bearerToken();
         // //echo "$id";
@@ -201,21 +226,26 @@ class ExampleController extends Controller
         //     return response()->json(['Invalid Token'],500);
         // }
         //echo("$id");
+        $users = $request->users;
+
+        if($users->role !== 'admin'){
+            return resposne()->json(['Unauthorised'],403);
+        }
 
         $users = $request->users;
 
-        if($users->role == 'admin'){ 
-            if($id === null){
-                return response()->json(["please provide id to be deleted"]);
-            }
+        //if($users->role == 'admin'){ 
+            // if($id === null){
+            //     return response()->json(["please provide id to be deleted"] , 400);
+            // }
 
             $temp = User::find($id);
             //$temp = User::where('id', $id) -> first();
             $temp->delete();   ////////handle error
             return response()->json(['deleted'],202);
-        }
-        $users->delete();   
-        return response()->json(['deleted'],202);
+        //}
+        // $users->delete();   
+        // return response()->json(['deleted'],202);
      }
 
 
@@ -290,7 +320,7 @@ class ExampleController extends Controller
 
         $users->save();
         
-        return response()->json(['updated'], 201);
+        return response()->json(['Updated'], 201);
      }
 
 
@@ -315,14 +345,12 @@ class ExampleController extends Controller
               ->subject('Verification Mail');
           });
           if (Mail::failures()) {
-            return 'Sorry! Please try again latter ';
-          } 
-          else {
-            return 'Verification email sent  to '.$email;
-          }
-          return response()->json(["Mail sent"],202);
+            return response()->json(["Verification mail can't be sent "]);
+            }   
+         
+        return response()->json(["Mail sent"],202);
 
-        return response()->json([$link],202);
+        //return response()->json([$link],202);
 
 
     }
@@ -339,7 +367,7 @@ class ExampleController extends Controller
         $users = $this->decode($request , $token , $purpose);
         }
         catch(TokenNotFoundException $e ){
-            return response()->json(['Invalid Token'],500);
+            return response()->json(['Invalid Token'],401);
         }
         
         $users->verify = 1;
@@ -355,24 +383,19 @@ class ExampleController extends Controller
         $this->validate($request, [
             'email' => 'required|email|exists:users',
         ]);
-
+        $email = $request->email;
         $jwt = $this->encode($request , $purpose);
-        $temp = "localhost:3000/changepassword?token=";
+        $temp = "http://localhost:3000/changepassword?token=";
         $link =$temp.$jwt;
 
-        echo $link;
-
-        Mail::raw('Please verify your identity by clicking on the below link. '.$link
+        Mail::raw("Change password by clicking on following link \n $link "
         , function ($message) use($email) {
             $message->to('ishankishansg@gmail.com')
               ->subject('Verification Mail');
           });
           if (Mail::failures()) {
-            return 'Sorry! Please try again latter';
+            return response()->json(["Verification mail can't be sent "]);
           } 
-          else {
-            return 'Email sent to '.$email;
-          }
 
           return response()->json(['Link sent'],202);
 
@@ -386,9 +409,9 @@ class ExampleController extends Controller
         ]);
         $token = $request->bearerToken();
 
-        if($request->password != $request->retypepassword){
-            return response()->json(['Password Mismatch'],401); // add error code
-        }
+        // if($request->password != $request->retypepassword){
+        //     return response()->json(['Password Mismatch'],401); // add error code
+        // }
         
         //$token = $request->token;
         $purpose = 'passchange';
@@ -398,7 +421,7 @@ class ExampleController extends Controller
             $users = $this->decode($request , $token , $purpose);
         }
         catch(TokenNotFoundException $e ){
-            return response()->json(['Invalid Token'],500);
+            return response()->json(['Invalid Token'],401);
         }
         //$users  = $this->decode($request , $purpose);
 

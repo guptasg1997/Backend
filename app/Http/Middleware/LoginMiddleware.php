@@ -26,11 +26,11 @@ class LoginMiddleware
         }
 
         if(time() - $payload->timevar  >= 30000){
-            return response()->json(['Expired Token']);
+            return response()->json(['Expired Token'],408); // request timeout
         }
 
         if($payload->purpose != 'login'){
-            return response()->json(['Unauthorized'],);
+            return response()->json(['Unauthorized'],401);
         }
         
         $email = $payload->email;

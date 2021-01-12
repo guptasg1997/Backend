@@ -153,7 +153,7 @@ class ExampleController extends Controller
         //     return response()->json(['Invalid Token'],500);
         // }
 
-        return response()->json([$users],202);
+        return response()->json($users,202);
 
 
     }
@@ -176,8 +176,13 @@ class ExampleController extends Controller
         // catch(TokenNotFoundException $e ){
         //     return response()->json(['Invalid Token'],500);
         // }
+        $users = $request->users;
 
-        if($users->role == 'admin')
+        if($users->role !== 'admin'){
+            $check = false;
+        }
+
+        //if($users->role == 'admin')
         {   
             if($check == false)
             {
@@ -202,9 +207,9 @@ class ExampleController extends Controller
             return response()->json($display,200);  //
             //}
         } 
-        else {
-            return response()->json(['You are not the ADMIN'], 401); 
-        }
+        // else {
+        //     return response()->json(['You are not the ADMIN'], 401); 
+        // }
     }
 
      public function destroy(Request $request)

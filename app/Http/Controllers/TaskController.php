@@ -25,22 +25,23 @@ class TaskController extends Controller
         $time = date('Y-m-d H:i:s');
 
         $users = $request->users;
-        if($users->role != 'admin'){
-            return response()->json(["You are not the admin"],403);
-        }
+        // if($users->role != 'admin'){
+        //     return response()->json(["You are not the admin"],403);
+        // }
 
         $this->validate($request, [
             'title' => 'required|string|max:50',
             'task' => 'required|string|max:200',
             'deadline' => "required|date|after:$time", // validation
-            'assigner' => 'required',
-            'assigned_to' => 'required',
+            //'assigner' => 'required',  // 
+            'assigned_to' => 'required|exists:users,id', // 
         ]);
 
         $title = $request->title;
         $task = $request->task;
         $deadline = $request->deadline;
-        $assigner = $request->assigner;
+        $assigner = $users->name;
+        $assigner_id  = $users->id;
         $assigned_to = $request->assigned_to;
 
         $users = USER::where('id' , $assigned_to)->first();
@@ -52,6 +53,7 @@ class TaskController extends Controller
         $tasks->deadline = $deadline;
         $tasks->assigner = $assigner;
         $tasks->assigned_to = $assigned_to;
+        $tasks->assigner_id = $assigner_id;
         $tasks->save();
 
         Mail::raw("Task Assigned \n Title : $title \n Description : $task \n Deadline : $deadline"
@@ -60,7 +62,7 @@ class TaskController extends Controller
               ->subject('New Task');
           });
           if (Mail::failures()) {
-            return response()->json(["Verification mail can't be sent "],201);
+            return response()->json(["Task mail can't be sent "],201);
           } 
         
 
@@ -71,18 +73,23 @@ class TaskController extends Controller
     public function get_task(Request $request){
 
         $users = $request->users;
-        if($users->role != 'admin'){
-            return response()->json(["You are not the admin"],403);
-        }
+        // if($users->role != 'admin'){
+        //     return response()->json(["You are not the admin"],403);
+        // }
 
         $this->validate($request, [
             'id' => 'required|exists:tasks',   // this is id of task
         ]);
+
         $id = $request->id;
         $display = Task::where('id' , $id)->first();
 
-        return response()->json($display ,200);
-
+        if($display->assigner_id === $users->id || $users->role ==='admin'){
+            return response()->json($display ,200);
+        }
+        else{
+            return response()->json(["Unauthorised"],403);
+        }
     }
 
     public function view_task(Request $request){
@@ -126,6 +133,7 @@ class TaskController extends Controller
                     $q->where('title' ,'like', '%'. $que .'%')
                     ->orWhere('task' ,'like', '%'. $que .'%');
                 })
+                ->orderBy('id', 'DESC')
                  ->paginate(2);
         }
         else{
@@ -135,12 +143,13 @@ class TaskController extends Controller
                     $q->where('title' ,'like', '%'. $que .'%')
                     ->orWhere('task' ,'like', '%'. $que .'%');
                 })
+                ->orderBy('id', 'DESC')
                 ->paginate(2);
         }
 
         //echo "$display.data";
         $len = sizeof($display);
-        for($i = 0 ; $i < $len ; $i++){   //for over_due
+        for($i = 0 ; $i < $len ; $i++){   //for overdue
            if($display[$i]->deadline < $time && ($display[$i]->progress ==='pending' || $display[$i]->progress === 'in_progress' )){
                $display[$i]->overdue = true;
            }
@@ -205,6 +214,8 @@ class TaskController extends Controller
         date_default_timezone_set('Asia/Kolkata');
         $time = date('Y-m-d H:i:s');
 
+        /// check for particular user
+
         $id = $request->id;
         $progress = $request->progress;
 
@@ -235,14 +246,19 @@ class TaskController extends Controller
     public function delete_task(Request $request){
 
         $users = $request->users;
-        if($users->role != 'admin'){
-            return response()->json(["You are not the admin"],403);
-        }
+        // if($users->role != 'admin'){
+        //     return response()->json(["You are not the admin"],403);
+        // }
 
         $this->validate($request, [
-            'id' => 'required|exists:users',  // id of task
+            'id' => 'required|exists:tasks',  // id of task
         ]);
         $id = $request->id;
+
+        if(!($users->id === $tasks->assigner_id || $users->role === 'admin')){
+            return response()->json(["Unauthorised"],403);
+        } 
+
         $display =Task::where('id',$id) ->first();
         $display->delete();
 
@@ -259,13 +275,13 @@ class TaskController extends Controller
             'id' => 'required|exists:tasks',  // id of task
             'title' => 'required|string|max:50',
             'task' => 'required|string|max:200',
-            'deadline' => 'required|date', // validation
+            'deadline' => 'required|date', // validation for previous date
         ]);
 
         $users = $request->users;
-        if($users->role != 'admin'){
-            return response()->json(["You are not the admin"],403);
-        }
+        // if($users->role !== 'admin' ){
+        //     return response()->json(["Unauthorised"],403);
+        // }
 
         $id = $request->id;
         $title = $request->title;
@@ -273,6 +289,10 @@ class TaskController extends Controller
         $deadline = $request->deadline;
 
         $tasks = Task::where('id' , $id)->first();
+
+        if(!($users->id === $tasks->assigner_id || $users->role === 'admin')){
+            return response()->json(["Unauthorised"],403);
+        } 
         $assigned_to = $tasks->assigned_to;
         $tasks->title = $title;
         $tasks->task = $task;
@@ -288,7 +308,7 @@ class TaskController extends Controller
               ->subject('Task Updated');
           });
           if (Mail::failures()) {
-            return response()->json(["Verification mail can't be sent "]);
+            return response()->json(["mail can't be sent "]);
           } 
         
         return response()->json(['successfull'],200);
@@ -311,7 +331,7 @@ class TaskController extends Controller
         date_default_timezone_set('Asia/Kolkata');
         $time = date('Y-m-d H:i:s');
 
-        if($id == 0){   
+        if($id === 0){   
             $display = Task::all();
         }
         else{
@@ -359,15 +379,17 @@ class TaskController extends Controller
 
 
         $users = $request->users;
-        if($users->role != 'admin'){
-            return response()->json(["You are not the admin"],403);
-        }
+        // if($users->role != 'admin'){
+        //     return response()->json(["You are not the admin"],403);
+        // }
+
+        $id = $users->id;
         
         $check = $request->check;
         $progress = $request->progress;
         $que = $request->que;
 
-        if($progress == 'all'){
+        if($progress === 'all'){
             $progress = '';
         }
 
@@ -375,22 +397,53 @@ class TaskController extends Controller
         $date = date('Y-m-d');
         $time = date('Y-m-d H:i:s');
 
-        if($check == 'true'){ // check for viewing todays of task
-             $display = Task::where('deadline', 'like' , '%'. $date .'%')
-                ->where('progress' ,'like', '%'. $progress .'%')
-                -> where( function($q) use($que){
-                    $q->where('title' ,'like', '%'. $que .'%')
-                    ->orWhere('task' ,'like', '%'. $que .'%');
-                })
-                 ->paginate(4);
+        if($users->role === 'admin'){
+            if($check == 'true'){ // check for viewing todays of task
+                $display = Task::where('deadline', 'like' , '%'. $date .'%')
+                   ->where('progress' ,'like', '%'. $progress .'%')
+                //    ->when($users->role !== 'admin' , function($q , $id) {
+                //        $q->where('assigner_id' , $id);
+                //    })
+                   -> where( function($q) use($que){
+                       $q->where('title' ,'like', '%'. $que .'%')
+                       ->orWhere('task' ,'like', '%'. $que .'%');
+                   })
+                   ->orderBy('id', 'DESC')
+                    ->paginate(4);
+           }
+           else{
+               $display = Task::where('progress' ,'like', '%'. $progress .'%')
+                   -> where( function($q) use($que){
+                       $q->where('title' ,'like', '%'. $que .'%')
+                       ->orWhere('task' ,'like', '%'. $que .'%');
+                   })
+                   ->orderBy('id', 'DESC')
+                   ->paginate(4);
+           }
         }
+
         else{
-            $display = Task::where('progress' ,'like', '%'. $progress .'%')
-                -> where( function($q) use($que){
-                    $q->where('title' ,'like', '%'. $que .'%')
-                    ->orWhere('task' ,'like', '%'. $que .'%');
-                })
-                ->paginate(4);
+            if($check == 'true'){ // check for viewing todays of task
+                $display = Task::where('deadline', 'like' , '%'. $date .'%')
+                   ->where('progress' ,'like', '%'. $progress .'%')
+                   ->where('assigner_id' , $id)
+                   -> where( function($q) use($que){
+                       $q->where('title' ,'like', '%'. $que .'%')
+                       ->orWhere('task' ,'like', '%'. $que .'%');
+                   })
+                   ->orderBy('id', 'DESC')
+                    ->paginate(4);
+           }
+           else{
+               $display = Task::where('progress' ,'like', '%'. $progress .'%')
+                   ->where('assigner_id' , $id)
+                   -> where( function($q) use($que){
+                       $q->where('title' ,'like', '%'. $que .'%')
+                       ->orWhere('task' ,'like', '%'. $que .'%');
+                   })
+                   ->orderBy('id', 'DESC')
+                   ->paginate(4);
+           }
         }
 
         $len = sizeof($display);

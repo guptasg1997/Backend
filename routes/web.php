@@ -45,9 +45,9 @@ $router->group(['middleware' => 'jwtLogin'], function () use ($router) {
 
     $router->post('/delete-task' , 'TaskController@delete_task');
 
-    $router->post('/complete-task' , 'TaskController@complete_task');
+    //$router->post('/complete-task' , 'TaskController@complete_task');
 
-    $router->post('/active-task' , 'TaskController@active_task');
+    //$router->post('/active-task' , 'TaskController@active_task');
 
     $router->post('/get-task' , 'TaskController@get_task');
 

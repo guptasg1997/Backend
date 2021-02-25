@@ -161,7 +161,7 @@ class TaskController extends Controller
     }
 
 
-    public function complete_task(Request $request){   //of no use now
+    public function complete_task(Request $request){
 
         $this->validate($request, [
             'id' => 'required|exists:users',  // id of task
